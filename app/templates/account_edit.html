@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ account.account_number }}{% endblock %}
+{% block content %}
+    <a href="/accounts/{{ account.account_number }}/detail" class="muted">&larr; Back to account</a>
+    <h2 style="margin-top:8px;">Edit {{ account.account_number }}</h2>
+    <p id="form_error" class="alert alert-danger" style="display:none;"></p>
+    <form id="edit_account_form"
+          method="post"
+          action="/accounts/{{ account.account_number }}/edit">
+        <input type="hidden"
+               name="removed_person_ids"
+               id="removed_person_ids"
+               value="">
+        <div class="card">
+            <h3>Account Details</h3>
+            <label>Account Number</label>
+            <input type="text"
+                   value="{{ account.account_number }}"
+                   disabled
+                   style="background:#F2F4F8;
+                          color:var(--color-muted);
+                          font-weight:700">
+            <label>Address</label>
+            <input type="text" name="address" value="{{ account.address or '' }}">
+            <label>Account Type</label>
+            <input type="text"
+                   name="account_type"
+                   value="{{ account.account_type or '' }}">
+            <label>Price Per Unit (KES)</label>
+            <input type="number"
+                   step="0.01"
+                   name="price_per_unit"
+                   value="{{ account.price_per_unit }}"
+                   required>
+        </div>
+        <div class="card">
+            <div class="topbar" style="margin-bottom:12px;">
+                <h3 style="margin:0;">People on this Account</h3>
+            </div>
+            <div id="people_rows">
+                {% for p in people %}
+                    <div class="card person-row"
+                         style="background:#FAFBFE"
+                         data-person-id="{{ p.id }}">
+                        <div class="topbar" style="margin-bottom:8px;">
+                            <span class="muted"
+                                  style="font-size:12px;
+                                         font-weight:700;
+                                         text-transform:uppercase">Person</span>
+                            <button type="button" class="btn btn-secondary btn-small remove-person-btn">Remove</button>
+                        </div>
+                        <input type="hidden" name="person_id" value="{{ p.id }}">
+                        <label>Full Name</label>
+                        <input type="text" name="person_name" value="{{ p.name }}" required>
+                        <label>Phone Number</label>
+                        <input type="text" name="person_phone" value="{{ p.phone_number or '' }}">
+                        <label>Preferred Contact Method</label>
+                        <select name="person_contact_method"
+                                style="width:100%;
+                                       font-size:16px;
+                                       padding:12px 14px;
+                                       margin-bottom:12px;
+                                       border:1.5px solid var(--color-border);
+                                       border-radius:10px;
+                                       background:white">
+                            <option value="whatsapp"
+                                    {% if p.contact_method == 'whatsapp' %}selected{% endif %}>WhatsApp</option>
+                            <option value="sms" {% if p.contact_method == 'sms' %}selected{% endif %}>SMS</option>
+                        </select>
+                    </div>
+                {% endfor %}
+            </div>
+            <button type="button" class="btn btn-secondary" onclick="addPersonRow()">+ Add Another Person</button>
+        </div>
+        <button type="submit"
+                class="btn btn-success"
+                style="font-size:17px;
+                       padding:16px">Save Changes</button>
+    </form>
+    <template id="person_row_template">
+        <div class="card person-row" style="background:#FAFBFE;">
+            <div class="topbar" style="margin-bottom:8px;">
+                <span class="muted"
+                      style="font-size:12px;
+                             font-weight:700;
+                             text-transform:uppercase">Person</span>
+                <button type="button" class="btn btn-secondary btn-small remove-person-btn">Remove</button>
+            </div>
+            <input type="hidden" name="person_id" value="">
+            <label>Full Name</label>
+            <input type="text" name="person_name" required>
+            <label>Phone Number</label>
+            <input type="text" name="person_phone" placeholder="2547XXXXXXXX">
+            <label>Preferred Contact Method</label>
+            <select name="person_contact_method"
+                    style="width:100%;
+                           font-size:16px;
+                           padding:12px 14px;
+                           margin-bottom:12px;
+                           border:1.5px solid var(--color-border);
+                           border-radius:10px;
+                           background:white">
+                <option value="whatsapp">WhatsApp</option>
+                <option value="sms">SMS</option>
+            </select>
+        </div>
+    </template>
+    <script>
+    function attachRemoveHandler(row) {
+        row.querySelector('.remove-person-btn').addEventListener('click', () => {
+            const personId = row.getAttribute('data-person-id');
+            if (personId) {
+                const hidden = document.getElementById('removed_person_ids');
+                hidden.value = hidden.value ? `${hidden.value},${personId}` : personId;
+            }
+            row.remove();
+        });
+    }
+
+    function addPersonRow() {
+        const template = document.getElementById('person_row_template');
+        const clone = template.content.cloneNode(true);
+        document.getElementById('people_rows').appendChild(clone);
+        // The newly appended row is the last child now
+        attachRemoveHandler(document.getElementById('people_rows').lastElementChild);
+    }
+
+    // Wire up remove buttons for the people already rendered server-side
+    document.querySelectorAll('#people_rows .person-row').forEach(attachRemoveHandler);
+
+    document.getElementById('edit_account_form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const errorBox = document.getElementById('form_error');
+        errorBox.style.display = 'none';
+
+        const res = await fetch(e.target.action, { method: 'POST', body: new FormData(e.target) });
+
+        if (res.redirected) {
+            window.location.href = res.url;
+            return;
+        }
+        if (!res.ok) {
+            const data = await res.json();
+            errorBox.innerText = data.detail || 'Something went wrong. Please check the form.';
+            errorBox.style.display = 'block';
+        }
+    });
+    </script>
+{% endblock %}

@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Submit Meter Reading{% endblock %}
+{% block content %}
+    <div class="topbar">
+        <h2>Meter Reading Entry</h2>
+        <a href="/logout" class="btn btn-secondary btn-small">Log out</a>
+    </div>
+    <div id="picker_section">
+        <label>Find Customer</label>
+        <input type="text"
+               id="filter_box"
+               placeholder="Type to filter, or scroll below..."
+               oninput="renderList()"
+               autocomplete="off">
+        <div id="customer_list" class="customer-list"></div>
+    </div>
+    <div id="account_info" class="card" style="display:none;">
+        <p><strong>Name(s):</strong> <span id="names"></span></p>
+        <div class="card" style="background:#f2f6f9;">Last reading on record: <span id="last_reading"></span></div>
+        <p id="already_read_note"
+           class="alert alert-warning"
+           style="display:none">You already submitted a reading this month. You're correcting it below.</p>
+        <label id="reading_label">This Month's Reading</label>
+        <input type="number" step="0.01" id="current_reading" inputmode="decimal">
+        <button type="button" onclick="submitReading()" class="btn btn-success" id="submit_btn">Submit Reading</button>
+        <button type="button" onclick="backToList()" class="btn btn-secondary">Choose a different customer</button>
+    </div>
+    <div class="card" style="text-align:center; margin-top: 20px;" >
+        <div class="meter-ring-wrap">
+            <svg viewBox="0 0 132 132" width="132" height="132">
+                <circle class="meter-ring-track" cx="66" cy="66" r="56" />
+                <circle class="meter-ring-progress" id="read_ring_circle" cx="66" cy="66" r="56" />
+            </svg>
+            <div class="meter-ring-label">
+                <span class="num" id="read_ring_num">{{ read_count }}</span>
+                <span class="of">of {{ total_accounts }} read</span>
+            </div>
+        </div>
+        <p class="muted" style="margin:0;">Accounts read this month</p>
+    </div>
+    <p id="error" class="alert alert-danger" style="display:none;"></p>
+    <p id="warning" class="alert alert-warning" style="display:none;"></p>
+    <script>
+    let allCustomers = [];
+    let currentAccountNumber = null;
+
+    // Safely parse Jinja variables with fallback to 0
+    let readCount = parseInt("{{ read_count | default(0) }}", 10) || 0;
+    const totalAccounts = parseInt("{{ total_accounts | default(0) }}", 10) || 0;
+    const RING_CIRCUMFERENCE = 2 * Math.PI * 56;
+
+    function updateReadRing() {
+        const circle = document.getElementById('read_ring_circle');
+        const numElem = document.getElementById('read_ring_num');
+
+        // Guard clause in case elements don't exist
+        if (!circle || !numElem) return;
+
+        const pct = totalAccounts > 0 ? Math.min(readCount / totalAccounts, 1) : 0;
+        circle.style.strokeDasharray = RING_CIRCUMFERENCE;
+        circle.style.strokeDashoffset = RING_CIRCUMFERENCE * (1 - pct);
+        numElem.textContent = readCount;
+    }
+
+    async function loadCustomers() {
+        const res = await fetch('/accounts/list');
+        allCustomers = await res.json();
+        renderList();
+    }
+
+    function renderList() {
+        const query = document.getElementById('filter_box').value.trim().toLowerCase();
+        const container = document.getElementById('customer_list');
+        container.innerHTML = '';
+
+        const filtered = query
+            ? allCustomers.filter(c => c.names.join(' ').toLowerCase().includes(query))
+            : allCustomers;
+
+        if (filtered.length === 0) {
+            container.innerHTML = '<p style="padding:12px;">No matches.</p>';
+            return;
+        }
+
+        filtered.forEach(acc => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            if (acc.already_read) {
+                btn.innerText = '✅ ' + acc.names.join(' / ');
+                btn.style.color = 'var(--color-muted)';
+            } else {
+                btn.innerText = acc.names.join(' / ');
+            }
+            btn.onclick = () => selectAccount(acc.account_number);
+            container.appendChild(btn);
+        });
+    }
+
+    async function selectAccount(accountNumber) {
+        const res = await fetch(`/accounts/${accountNumber}/summary`);
+        const data = await res.json();
+
+        currentAccountNumber = data.account_number;
+        document.getElementById('names').innerText = data.names.join(', ');
+        document.getElementById('last_reading').innerText = data.reference_reading;
+
+        const alreadyReadNote = document.getElementById('already_read_note');
+        const readingLabel = document.getElementById('reading_label');
+        const submitBtn = document.getElementById('submit_btn');
+        const readingInput = document.getElementById('current_reading');
+
+        if (data.already_read_this_month) {
+            alreadyReadNote.style.display = 'block';
+            readingLabel.innerText = "Correct This Month's Reading";
+            submitBtn.innerText = 'Update Reading';
+            readingInput.value = data.this_month_reading;
+        } else {
+            alreadyReadNote.style.display = 'none';
+            readingLabel.innerText = "This Month's Reading";
+            submitBtn.innerText = 'Submit Reading';
+            readingInput.value = '';
+        }
+
+        document.getElementById('picker_section').style.display = 'none';
+        document.getElementById('account_info').style.display = 'block';
+        hideMessages();
+    }
+
+    function backToList() {
+        document.getElementById('picker_section').style.display = 'block';
+        document.getElementById('account_info').style.display = 'none';
+        document.getElementById('current_reading').value = '';
+    }
+
+    function hideMessages() {
+        document.getElementById('error').style.display = 'none';
+        document.getElementById('warning').style.display = 'none';
+    }
+
+    async function submitReading(confirmOverwrite) {
+        hideMessages();
+
+        const readingValue = document.getElementById('current_reading').value;
+        if (readingValue === '') {
+            const err = document.getElementById('error');
+            err.innerText = 'Please enter a reading.';
+            err.style.display = 'block';
+            return;
+        }
+
+        const payload = {
+            account_number: currentAccountNumber,
+            current_reading: parseFloat(readingValue),
+            confirm_overwrite: confirmOverwrite
+        };
+
+        const res = await fetch('/bills/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            const err = document.getElementById('error');
+            err.innerText = data.detail;
+            err.style.display = 'block';
+            return;
+        }
+
+        if (data.status === 'warning') {
+            const confirmed = confirm(
+                `${data.message}\nExisting reading: ${data.existing_reading} (KES ${data.existing_amount_due})\nNew reading: ${data.new_reading} (KES ${data.new_amount_due})\n\nProceed with overwrite?`
+            );
+            if (confirmed) submitReading(true);
+            return;
+        }
+
+        alert(`Success! Bill ${data.status}. Amount due: KES ${data.bill.amount_due}`);
+
+        if (data.status === 'created') {
+            readCount++;
+            updateReadRing();
+        }
+
+        backToList();
+    }
+
+    // Run DOM initialization safely when page is fully loaded
+    document.addEventListener('DOMContentLoaded', () => {
+        updateReadRing();
+        loadCustomers();
+    });
+    </script>
+{% endblock %}

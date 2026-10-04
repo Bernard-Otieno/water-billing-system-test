@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Send Bills{% endblock %}
+{% block content %}
+    <div class="topbar">
+        <h2>Send Bills</h2>
+        <a href="/dashboard" class="btn btn-secondary btn-small">Back to Dashboard</a>
+    </div>
+    <form method="post"
+          action="/billing/mark-sent"
+          id="mark-all-form"
+          style="text-align:right;
+                 margin-bottom:8px"
+          onsubmit="return confirmMarkAll()">
+        <input type="hidden" name="bill_ids" id="mark-all-ids">
+        <button type="submit" class="btn btn-secondary btn-small">Already sent these? Clear the queue</button>
+    </form>
+    <div class="card" style="text-align:center;">
+        <div class="meter-ring-wrap">
+            <svg viewBox="0 0 132 132" width="132" height="132">
+                <circle class="meter-ring-track" cx="66" cy="66" r="56" />
+                <circle class="meter-ring-progress" id="sent_ring_circle" cx="66" cy="66" r="56" />
+            </svg>
+            <div class="meter-ring-label">
+                <span class="num" id="sent_ring_num">0</span>
+                <span class="of" id="sent_ring_of">of 0 sent</span>
+            </div>
+        </div>
+        <p class="muted" style="margin:0;">Bills sent to customers</p>
+    </div>
+    <div id="current_card" class="card" style="text-align:center;">
+        <p class="muted" id="progress" style="font-size:16px;"></p>
+        <h2 id="current_name" style="margin-bottom:20px;"></h2>
+        <table class="data-table" style="max-width:400px; margin:0 auto 20px;">
+            <tr>
+                <th>Last Month</th>
+                <th>This Month</th>
+            </tr>
+            <tr>
+                <td id="prev_reading" style="font-size:18px;"></td>
+                <td id="curr_reading" style="font-size:18px;"></td>
+            </tr>
+        </table>
+        <p style="font-size:16px;">This Month's Bill: <strong id="this_bill"></strong></p>
+        <p style="font-size:16px;">Previous Balance: <strong id="prev_balance"></strong></p>
+        <p style="font-size:22px;
+                  color:var(--color-danger);
+                  margin:12px 0 24px">
+            TOTAL OWED: <strong id="total_owed"></strong>
+        </p>
+        <div id="link-container"
+             style="display:flex;
+                    flex-direction:column;
+                    gap:10px;
+                    max-width:300px;
+                    margin:0 auto"></div>
+        <button type="button"
+                class="btn btn-secondary"
+                style="max-width:300px;
+                       margin:16px auto 0"
+                onclick="skipCurrent()">Skip This Customer</button>
+    </div>
+    <div id="done_card" class="card" style="display:none; text-align:center;">
+        <h2>✅ All Done</h2>
+        <p>No more bills waiting to be sent.</p>
+    </div>
+    <script id="queue-data" type="application/json">{{ queue | tojson }}</script>
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        let currentIndex = 0;
+        const rawData = document.getElementById('queue-data').textContent;
+        const queue = JSON.parse(rawData || "[]");
+
+        document.getElementById('mark-all-ids').value = queue.map(item => item.bill_id).join(',');
+        
+        window.confirmMarkAll = function() {
+            return confirm(`Mark all ${queue.length} bill(s) in this list as sent, without opening WhatsApp for any of them?`);
+        };
+
+        // Real numbers across ALL active customers, computed server-side each page
+        // load - not just whatever's in this page's queue (that's why the single-
+        // customer send page used to always show "1 of 1"; now it shows the truth).
+        let sentCount = parseInt("{{ notified_count | default(0) }}", 10) || 0;
+        const totalBillable = parseInt("{{ total_billable | default(0) }}", 10) || 0;
+        const RING_CIRCUMFERENCE = 2 * Math.PI * 56;
+
+        function updateSentRing() {
+            const circle = document.getElementById('sent_ring_circle');
+            if (!circle) return;
+            const pct = totalBillable > 0 ? Math.min(sentCount / totalBillable, 1) : 0;
+            circle.style.strokeDasharray = RING_CIRCUMFERENCE;
+            circle.style.strokeDashoffset = RING_CIRCUMFERENCE * (1 - pct);
+            document.getElementById('sent_ring_num').textContent = sentCount;
+            document.getElementById('sent_ring_of').textContent = `of ${totalBillable} sent`;
+        }
+
+        function renderCurrent() {
+            if (currentIndex >= queue.length) {
+                document.getElementById('current_card').style.display = 'none';
+                document.getElementById('done_card').style.display = 'block';
+                return;
+            }
+
+            const item = queue[currentIndex];
+            document.getElementById('progress').innerText = `Customer ${currentIndex + 1} of ${queue.length}`;
+            document.getElementById('current_name').innerText = `${item.account_number} — ${item.names}`;
+            document.getElementById('prev_reading').innerText = item.previous_reading;
+            document.getElementById('curr_reading').innerText = item.current_reading;
+            document.getElementById('this_bill').innerText = `KES ${item.amount_due.toFixed(2)}`;
+            document.getElementById('prev_balance').innerText = `KES ${item.opening_balance.toFixed(2)}`;
+            document.getElementById('total_owed').innerText = `KES ${item.closing_balance.toFixed(2)}`;
+
+            const container = document.getElementById('link-container');
+            container.innerHTML = '';
+            item.contacts.forEach(c => {
+                const btn = document.createElement('a');
+                btn.href = c.link;
+                btn.innerText = c.channel === 'whatsapp' ? `Send WhatsApp to ${c.name}` : `Send SMS to ${c.name}`;
+                btn.className = 'btn btn-success';
+
+                btn.addEventListener('click', () => {
+                    const formData = new FormData();
+                    formData.append('bill_id', item.bill_id);
+                    if (navigator.sendBeacon) {
+                        navigator.sendBeacon('/billing/mark-sent-single', formData);
+                    } else {
+                        fetch('/billing/mark-sent-single', { method: 'POST', body: formData, keepalive: true });
+                    }
+                    sentCount++;
+                    updateSentRing();
+                    setTimeout(() => { currentIndex++; renderCurrent(); }, 400);
+                });
+
+                container.appendChild(btn);
+            });
+        }
+
+        window.skipCurrent = function() {
+            currentIndex++;
+            renderCurrent();
+        };
+
+        updateSentRing();
+        renderCurrent();
+    });
+    </script>
+{% endblock %}

@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    image: bcotieno/water-billing:test
+    ports:
+      - "8000:8080"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload

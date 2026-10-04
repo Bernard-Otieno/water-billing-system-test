@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Add Customer{% endblock %}
+{% block content %}
+    <a href="/dashboard" class="muted">&larr; Back to all accounts</a>
+    <h2 style="margin-top:8px;">Add a New Customer</h2>
+    <p id="form_error" class="alert alert-danger" style="display:none;"></p>
+    <form id="add_account_form" method="post" action="/accounts/add">
+        <div class="card">
+            <h3>Account Details</h3>
+            <label>Account Number (auto-assigned)</label>
+            <input type="text"
+                   value="{{ next_number }}"
+                   disabled
+                   style="background:#F2F4F8;
+                          color:var(--color-muted);
+                          font-weight:700">
+            <label>Address</label>
+            <input type="text" name="address">
+            <label>Account Type</label>
+            <input type="text"
+                   name="account_type"
+                   placeholder="e.g. Residential"
+                   value="Residential">
+            <label>Price Per Unit (KES)</label>
+            <input type="number" step="0.01" name="price_per_unit" required>
+        </div>
+        <div class="card">
+            <div class="topbar" style="margin-bottom:12px;">
+                <h3 style="margin:0;">People on this Account</h3>
+            </div>
+            <div id="people_rows"></div>
+            <button type="button" class="btn btn-secondary" onclick="addPersonRow()">+ Add Another Person</button>
+        </div>
+        <button type="submit"
+                class="btn btn-success"
+                style="font-size:17px;
+                       padding:16px">Create Account</button>
+    </form>
+    <template id="person_row_template">
+        <div class="card person-row" style="background:#FAFBFE;">
+            <div class="topbar" style="margin-bottom:8px;">
+                <span class="muted"
+                      style="font-size:12px;
+                             font-weight:700;
+                             text-transform:uppercase">Person</span>
+                <button type="button" class="btn btn-secondary btn-small remove-person-btn">Remove</button>
+            </div>
+            <label>Full Name</label>
+            <input type="text" name="person_name" required>
+            <label>Phone Number</label>
+            <input type="text" name="person_phone" placeholder="2547XXXXXXXX">
+            <label>Preferred Contact Method</label>
+            <select name="person_contact_method"
+                    style="width:100%;
+                           font-size:16px;
+                           padding:12px 14px;
+                           margin-bottom:12px;
+                           border:1.5px solid var(--color-border);
+                           border-radius:10px;
+                           background:white">
+                <option value="whatsapp">WhatsApp</option>
+                <option value="sms">SMS</option>
+            </select>
+        </div>
+    </template>
+    <script>
+    function addPersonRow() {
+        const template = document.getElementById('person_row_template');
+        const clone = template.content.cloneNode(true);
+        clone.querySelector('.remove-person-btn').addEventListener('click', (e) => {
+            e.target.closest('.person-row').remove();
+        });
+        document.getElementById('people_rows').appendChild(clone);
+    }
+
+    // Start with one person row filled in by default
+    addPersonRow();
+
+    document.getElementById('add_account_form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const errorBox = document.getElementById('form_error');
+        errorBox.style.display = 'none';
+
+        const res = await fetch(e.target.action, { method: 'POST', body: new FormData(e.target) });
+
+        if (res.redirected) {
+            window.location.href = res.url;
+            return;
+        }
+        if (!res.ok) {
+            const data = await res.json();
+            errorBox.innerText = data.detail || 'Something went wrong. Please check the form.';
+            errorBox.style.display = 'block';
+        }
+    });
+    </script>
+{% endblock %}

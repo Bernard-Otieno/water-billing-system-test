@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}Your Bill{% endblock %}
+{% block content %}
+
+<div class="card">
+    <p class="muted" style="margin-bottom:2px;">Account {{ account_number }} &middot; {{ names }}</p>
+        {% if latest_bill.closing_balance > 0 %}
+        <p style="font-size:28px; font-weight:700; margin:0 0 16px;">
+            KES {{ "%.2f"|format(latest_bill.closing_balance) }} due
+        </p>
+        {% elif latest_bill.closing_balance == 0 %}
+        <p style="font-size:28px; font-weight:700; margin:0 0 16px; color:var(--color-success);">
+            Fully paid
+        </p>
+        {% else %}
+        <p style="font-size:28px; font-weight:700; margin:0 0 16px; color:var(--color-success);">
+            Credit balance: KES {{ "%.2f"|format(-latest_bill.closing_balance) }}
+        </p>
+        {% endif %}
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+        <div class="card" style="background:#f2f6f9; margin-bottom:0;">
+            <p class="muted" style="margin-bottom:4px;">This month's bill</p>
+            <p style="font-size:18px; font-weight:600; margin:0;">
+                KES {{ "%.2f"|format(latest_bill.amount_due) }}
+            </p>
+        </div>
+        <div class="card" style="background:#f2f6f9; margin-bottom:0;">
+            <p class="muted" style="margin-bottom:4px;">Previous balance</p>
+            <p style="font-size:18px; font-weight:600; margin:0;">
+                KES {{ "%.2f"|format(latest_bill.opening_balance) }}
+            </p>
+        </div>
+    </div>
+
+    <p class="muted" style="margin-bottom:16px;">
+         Reading: ({{ latest_bill.current_reading }} current) from ({{ latest_bill.previous_reading }} previous) -&gt
+        ({{ latest_bill.units_used }} units) &middot; {{ latest_bill.billing_month }}/{{ latest_bill.billing_year }}
+    </p>
+
+    <!-- {% if latest_bill.closing_balance > 0 %}
+    <div id="mpesa_section" style="margin-top:12px;">
+        <label>M-Pesa Phone Number</label>
+        <input type="tel" id="mpesa_phone" placeholder="2547XXXXXXXX" inputmode="numeric">
+        <button type="button" class="btn btn-success" id="mpesa_pay_btn" onclick="startMpesaPayment()">
+            Pay with M-Pesa
+        </button>
+        <p id="mpesa_status" class="muted" style="margin-top:8px;"></p>
+    </div>
+    {% endif %} -->
+
+    <a href="/bill-snapshot/{{ token }}" class="btn btn-secondary" download>Download</a>
+
+    <button type="button" class="btn btn-primary" id="toggle_btn" onclick="toggleHistory()">
+        View full history &darr;
+    </button>
+</div>
+
+{% if featured_ads %}
+<div class="card" style="background:#fdf8ee;">
+    {% for ad in featured_ads %}
+    <a href="/ads/{{ ad.id }}/click"
+       class="link-strong {% if not loop.last %}mb-10{% endif %}"
+       style="display:block;">
+        {{ ad.business_name }} &mdash; {{ ad.description }}{% if ad.landmark %} ({{ ad.landmark }}){% endif %}
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div id="history_section" style="display:none;">
+
+    <h3 class="section-gap">Usage Trend</h3>
+    <div class="card">
+        <canvas id="usage_chart" height="120"></canvas>
+    </div>
+
+    <h3 class="section-gap">Bill History</h3>
+    <div class="card" style="overflow-x:auto;">
+        <table class="data-table">
+            <tr><th>Month</th><th>Reading</th><th>Units</th><th>Bill</th><th>Balance</th><th>Status</th></tr>
+            {% for b in bills %}
+            <tr>
+                <td>{{ b.billing_month }}/{{ b.billing_year }}</td>
+                <td>{{ b.previous_reading }} -&gt; {{ b.current_reading }}</td>
+                <td>{{ b.units_used }}</td>
+                <td>{{ "%.2f"|format(b.amount_due) }}</td>
+                <td class="{% if b.closing_balance > 0 %}text-danger{% elif b.closing_balance < 0 %}text-success{% endif %}">
+                    {% if b.closing_balance < 0 %}
+                        Credit: KES {{ "%.2f"|format(-b.closing_balance) }}
+                    {% else %}
+                        KES {{ "%.2f"|format(b.closing_balance) }}
+                    {% endif %}
+                </td>
+                <td><span class="badge badge-{{ b.display_status }}">{{ b.display_status }}</span></td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+
+    <h3 class="section-gap">Payments</h3>
+    <div class="card">
+        <table class="data-table">
+            <tr><th>Date</th><th>Amount</th></tr>
+            {% for p in payments %}
+            <tr><td>{{ p.payment_date }}</td><td>{{ "%.2f"|format(p.amount) }}</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+
+    {% if starter_ads %}
+    <h3 class="section-gap">Local Businesses</h3>
+    <div class="card">
+        {% for ad in starter_ads %}
+        <a href="/ads/{{ ad.id }}/click"
+           class="link-strong {% if not loop.last %}mb-8{% endif %}"
+           style="display:block;">
+            {{ ad.business_name }}{% if ad.landmark %} ({{ ad.landmark }}){% endif %}
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- TODO(Bernard): point this at whatever Chart.js CDN URL stats.html already
+     uses, so both pages load the exact same version instead of two different
+     ones. -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+    /* jinja syntax inside JS workaround */
+    const usageData = JSON.parse('{{ usage_trend | tojson | safe }}');
+    let usageChart = null;
+
+    function toggleHistory() {
+        const section = document.getElementById('history_section');
+        const btn = document.getElementById('toggle_btn');
+        const isHidden = section.style.display === 'none' || section.style.display === '';
+
+        if (isHidden) {
+            section.style.display = 'block';
+            btn.innerText = 'Hide full history \u2191';
+
+            // Lazy initialization on first expand
+            if (!usageChart) {
+                usageChart = new Chart(document.getElementById('usage_chart'), {
+                    type: 'line',
+                    data: {
+                        labels: usageData.labels,
+                        datasets: [{
+                            label: 'Units used',
+                            data: usageData.units,
+                            borderColor: '#0d6e9c',
+                            backgroundColor: 'rgba(13, 110, 156, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        }]
+                    },
+                    options: {
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Months'
+                                }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Units'
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                // Force Chart.js to re-measure layout on re-open
+                usageChart.resize();
+            }
+        } else {
+            section.style.display = 'none';
+            btn.innerText = 'View full history \u2193';
+        }
+    }
+    async function startMpesaPayment() {
+    const phone = document.getElementById('mpesa_phone').value.trim();
+    const statusEl = document.getElementById('mpesa_status');
+    const btn = document.getElementById('mpesa_pay_btn');
+
+    if (!phone) {
+        statusEl.innerText = 'Enter a phone number first.';
+        return;
+    }
+
+    btn.disabled = true;
+    statusEl.innerText = 'Sending payment prompt to your phone...';
+
+    const res = await fetch('/bill-view/{{ token }}/mpesa/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone_number: phone })
+    });
+
+    if (!res.ok) {
+        const err = await res.json();
+        statusEl.innerText = err.detail || 'Something went wrong.';
+        btn.disabled = false;
+        return;
+    }
+
+    const data = await res.json();
+    pollMpesaStatus(data.checkout_request_id, statusEl, btn);
+}
+
+    function pollMpesaStatus(checkoutRequestId, statusEl, btn) {
+        const intervalId = setInterval(async () => {
+            const res = await fetch(`/bill-view/{{ token }}/mpesa/status/${checkoutRequestId}`);
+            const data = await res.json();
+
+            if (data.status === 'success') {
+                clearInterval(intervalId);
+                statusEl.innerText = `Payment confirmed! Receipt: ${data.mpesa_receipt}`;
+                btn.disabled = false;
+            } else if (data.status === 'failed') {
+                clearInterval(intervalId);
+                statusEl.innerText = `Payment didn't go through: ${data.result_desc}`;
+                btn.disabled = false;
+            }
+            // otherwise still "pending" - keep polling
+        }, 3000);
+
+        setTimeout(() => clearInterval(intervalId), 120000);  // give up politely after 2 minutes
+    }
+</script>
+{% endblock %}

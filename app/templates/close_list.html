@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Close Accounts List{% endblock %}
+{% block content %}
+
+<div class="topbar">
+    <h2>Prepare Closure List</h2>
+    <a href="/dashboard" class="btn btn-secondary btn-small">Back to Dashboard</a>
+</div>
+
+<div class="card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <div>
+        <button type="button" class="btn btn-secondary btn-small" onclick="setSort('balance')">Sort by Balance</button>
+        <button type="button" class="btn btn-secondary btn-small" onclick="setSort('name')">Sort A–Z</button>
+    </div>
+    <input type="text" id="filter_box" placeholder="Search by name..." oninput="filterTable()" autocomplete="off" style="margin-bottom:16px;">
+    <button type="button" class="btn btn-success btn-small" onclick="downloadList()">⬇️ Download Selected Names</button>
+</div>
+
+<div class="card" style="overflow-x:auto;">
+    <table class="data-table" id="close_table">
+        <tr><th></th><th>Name(s)</th><th>Account</th><th>Balance Owed</th></tr>
+        {% for row in rows %}
+        <tr data-name="{{ row.names|lower }}" data-balance="{{ row.balance }}">
+            <td><input type="checkbox" class="row_check" data-name="{{ row.names }}"></td>
+            <td>{{ row.names }}</td>
+            <td>{{ row.account_number }}</td>
+            <td class="{% if row.balance > 0 %}text-danger{% elif row.balance < 0 %}text-success{% endif %}">
+                {{ "%.2f"|format(row.balance) }}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+
+<script>
+    function setSort(mode) {
+        const table = document.getElementById('close_table');
+        const rows = Array.from(table.querySelectorAll('tr[data-name]'));
+
+        rows.sort((a, b) => {
+            if (mode === 'balance') {
+                return parseFloat(b.dataset.balance) - parseFloat(a.dataset.balance);
+            }
+            return a.dataset.name.localeCompare(b.dataset.name);
+        });
+
+        // Re-appending an existing row MOVES it (doesn't duplicate it) —
+        // this is the same trick your filterTable() uses elsewhere, just for order instead of visibility.
+        rows.forEach(row => table.appendChild(row));
+    }
+
+    function downloadList() {
+        const checked = document.querySelectorAll('.row_check:checked');
+        if (checked.length === 0) {
+            alert('Select at least one account first.');
+            return;
+        }
+
+        const names = Array.from(checked).map(cb => cb.dataset.name);
+        const content = names.join('\n');
+
+        // This is the standard "make a file in the browser, no server involved" pattern:
+        // wrap the text in a Blob, give it a temporary URL, fake-click a download link, clean up.
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+
+        const today = new Date().toISOString().slice(0, 10);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `closure_list_${today}.txt`;
+        a.click();
+
+        URL.revokeObjectURL(url);
+    }
+    function filterTable() {
+        const query = document.getElementById('filter_box').value.trim().toLowerCase();
+        const rows = document.querySelectorAll('#close_table tr[data-name]');
+        rows.forEach(row => {
+            const matches = row.dataset.name.includes(query);
+            row.style.display = matches ? '' : 'none';
+        });
+}
+</script>
+{% endblock %}

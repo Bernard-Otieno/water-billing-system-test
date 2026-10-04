@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Log In{% endblock %}
+{% block content %}
+    <div class="card" style="max-width:340px; margin:60px auto 0;">
+        <h2>💧 Water Billing System</h2>
+        <p class="muted">Sign in to continue</p>
+        {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+        <form method="post" action="/login">
+            <label>Username</label>
+            <input type="text" name="username" required autofocus>
+            <label>Password</label>
+            <input type="password" name="password" required>
+            <button type="submit" class="btn btn-primary">Log In</button>
+        </form>
+    </div>
+{% endblock %}

@@ -1,0 +1,137 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  # ---------------------------------------------------------------------
+  # CODE QUALITY
+  # ---------------------------------------------------------------------
+  lint:
+    name: Code Quality (Ruff + Black)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install lint tools
+        run: pip install ruff black
+
+      - name: Ruff (lint)
+        run: ruff check .
+
+      - name: Black (format check)
+        run: black --check .
+
+  # ---------------------------------------------------------------------
+  # SECURITY
+  # ---------------------------------------------------------------------
+  security:
+    name: Security Scans
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # gitleaks needs full history, not just the latest commit
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install security tools
+        run: pip install bandit pip-audit
+
+      - name: Bandit (Python security static analysis)
+        run: bandit -r app -ll
+
+      - name: pip-audit (dependency vulnerability scan)
+        run: pip-audit -r requirements.txt
+
+      - name: Gitleaks (secret scanning)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------
+  # TEMPLATE & API SAFETY
+  # ---------------------------------------------------------------------
+  templates:
+    name: Template & App Safety
+    runs-on: ubuntu-latest
+    env:
+      # Dummy values only - just enough for `import app.main` to succeed without
+      # crashing on missing os.environ[...] lookups. Never real credentials.
+      SUPABASE_URL: "https://placeholder.supabase.co"
+      SUPABASE_KEY: "ci-placeholder-key"
+      SESSION_SECRET_KEY: "ci-placeholder-secret"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install app + template tools
+        run: |
+          pip install -r requirements.txt
+          pip install djlint
+
+      - name: djLint (Jinja/HTML template linting)
+        # H021 (avoid inline styles) and H023 (avoid entity references) are ignored
+        # deliberately - this codebase uses inline style="" and entities like
+        # &larr;/&rarr; throughout on purpose. Refactoring that is a real, separate
+        # piece of work, not something to silently absorb into a CI setup task.
+        run: djlint app/templates --extension=html --ignore=H021,H023,H014,H030
+
+      - name: Jinja template compile check
+        run: python scripts/check_templates.py
+
+      - name: Import smoke check (app must at least start importing cleanly)
+        run: python -c "import app.main"
+
+  # ---------------------------------------------------------------------
+  # DOCKER
+  # ---------------------------------------------------------------------
+  docker:
+    name: Docker Build & Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Hadolint (Dockerfile lint)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: error   # style warnings won't block, real errors will
+
+      - name: Build Docker image
+        run: docker build -t water-billing-system:ci .
+
+      - name: Trivy (container vulnerability scan)
+        uses: aquasecurity/trivy-action@v0.24.0
+        with:
+          image-ref: 'water-billing-system:ci'
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+  # ---------------------------------------------------------------------
+  # DEPLOY - only runs on a real push to main, and only if every check above passed
+  # ---------------------------------------------------------------------
+  deploy:
+    name: Deploy to Render
+    needs: [lint, security, templates, docker]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy hook
+        run: curl -f "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"

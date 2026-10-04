@@ -1,0 +1,22 @@
+# --- Secrets - must never enter the image ---
+.env
+.env.*
+
+# --- Python ---
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# --- Virtual environment - never needed inside the container ---
+.venv/
+venv/
+
+# --- Git ---
+.git/
+.gitignore
+
+# --- Stray local artifacts ---
+test_snapshot.png
+*.xlsx
+structure.txt
+test.py

@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}{{ account_number }}{% endblock %}
+{% block content %}
+    <a href="/dashboard" class="muted">&larr; Back to all accounts</a>
+    <div class="topbar" style="margin-top:8px;">
+        <h2 style="margin:0;">{{ account_number }} — {{ names }}</h2>
+        <div style="display:flex; gap:8px;">
+            <a href="/accounts/{{ account_number }}/edit"
+               class="btn btn-secondary btn-small">Edit Account</a>
+            <a href="/accounts/{{ account_number }}/send"
+               class="btn btn-success btn-small"
+               style="float:right">📩 Bill This Customer</a>
+            <form method="post"
+                  action="/accounts/{{ account_number }}/delete"
+                  onsubmit="return confirm('Remove this account? It will be hidden from the dashboard but all billing history is kept.')">
+                <button type="submit" class="btn btn-danger btn-small">Delete Account</button>
+            </form>
+        </div>
+    </div>
+    <h3>Bill History</h3>
+    <div class="card" style="overflow-x:auto;">
+        <table class="data-table">
+            <tr>
+                <th>Month</th>
+                <th>Reading</th>
+                <th>Units</th>
+                <th>Bill</th>
+                <th>Balance</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+            {% for b in bills %}
+                <tr class="{% if b.is_latest %}is-latest{% endif %}">
+                    <td>{{ b.billing_month }}/{{ b.billing_year }}</td>
+                    <td>
+                        {% if b.is_latest %}
+                            {{ b.previous_reading }} →
+                            <input type="number"
+                                   step="0.01"
+                                   name="current_reading"
+                                   form="reading-form-{{ b.id }}"
+                                   value="{{ b.current_reading }}"
+                                   style="width:130px;
+                                          display:inline-block;
+                                          margin:0">
+                        {% else %}
+                            {{ b.previous_reading }} → {{ b.current_reading }}
+                        {% endif %}
+                    </td>
+                    <td>{{ b.units_used }}</td>
+                    <td>{{ "%.2f"|format(b.amount_due) }}</td>
+                    <td>
+                        {% if b.is_latest %}
+                            <input type="number"
+                                   step="0.01"
+                                   name="closing_balance"
+                                   form="balance-form-{{ b.id }}"
+                                   value="{{ b.closing_balance }}"
+                                   style="width:130px;
+                                          display:inline-block;
+                                          margin:0">
+                        {% else %}
+                            {{ "%.2f"|format(b.closing_balance) }}
+                        {% endif %}
+                    </td>
+                    <td><span class="badge badge-{{ b.status }}">{{ b.status }}</span></td>
+                    <td style="white-space:nowrap;">
+                        {% if b.is_latest %}
+                            <div class="action-buttons">
+                                <button type="submit"
+                                        form="reading-form-{{ b.id }}"
+                                        class="btn btn-primary btn-small">Save Reading</button>
+                                <button type="submit"
+                                        form="balance-form-{{ b.id }}"
+                                        class="btn btn-primary btn-small">Save Balance</button>
+                                <button type="submit"
+                                        form="delete-form-{{ b.id }}"
+                                        class="btn btn-danger btn-small"
+                                        onclick="return confirm('Delete the {{ b.billing_month }}/{{ b.billing_year }} bill entirely?')">Delete</button>
+                                {% if b.notified_at %}
+                                    <button type="submit"
+                                            form="unmark-form-{{ b.id }}"
+                                            class="btn btn-secondary btn-small">Undo "Sent" status</button>
+                                    <form id="unmark-form-{{ b.id }}"
+                                          method="post"
+                                          action="/bills/{{ b.id }}/unmark-sent"
+                                          style="display:none">
+                                        <input type="hidden" name="account_number" value="{{ account_number }}">
+                                    </form>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </table>
+    </div>
+    <div class="card" style="text-align:center;">
+        <h3>Bill Preview</h3>
+        <img src="/bill-snapshot/{{ snapshot_token }}"
+             alt="Bill snapshot preview"
+             style="max-width:100%;
+                    border:1px solid var(--color-border);
+                    border-radius:8px">
+    </div>
+    <!-- Invisible "action" forms - linked to the table cells above via the form="" attribute -->
+    {% for b in bills %}
+        {% if b.is_latest %}
+            <form id="reading-form-{{ b.id }}"
+                  method="post"
+                  action="/bills/{{ b.id }}/edit"
+                  style="display:none">
+                <input type="hidden" name="account_number" value="{{ account_number }}">
+            </form>
+            <form id="balance-form-{{ b.id }}"
+                  method="post"
+                  action="/bills/{{ b.id }}/edit-balance"
+                  style="display:none">
+                <input type="hidden" name="account_number" value="{{ account_number }}">
+            </form>
+            <form id="delete-form-{{ b.id }}"
+                  method="post"
+                  action="/bills/{{ b.id }}/delete"
+                  style="display:none">
+                <input type="hidden" name="account_number" value="{{ account_number }}">
+            </form>
+        {% endif %}
+    {% endfor %}
+    <h3 class="section-gap">Payments</h3>
+    <div class="card">
+        <table class="data-table">
+            <tr>
+                <th>Date</th>
+                <th>Amount</th>
+                <th>Actions</th>
+            </tr>
+            {% for b in bills %}
+                {% for p in b.payments %}
+                    <tr>
+                        <td>{{ p.payment_date }}</td>
+                        <td>{{ "%.2f"|format(p.amount) }}</td>
+                        <td>
+                            <form method="post"
+                                  action="/payments/{{ p.id }}/delete"
+                                  style="margin:0"
+                                  onsubmit="return confirm('Delete this payment?')">
+                                <input type="hidden" name="account_number" value="{{ account_number }}">
+                                <button type="submit" class="btn btn-danger btn-small">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+            {% endfor %}
+        </table>
+        {% for b in bills %}
+            {% if b.is_latest %}
+                <form method="post"
+                      action="/accounts/{{ account_number }}/payment"
+                      style="margin-top:12px">
+                    <input type="hidden" name="bill_id" value="{{ b.id }}">
+                    <label>Record a new payment (against {{ b.billing_month }}/{{ b.billing_year }})</label>
+                    <input type="number" step="0.01" name="amount" required>
+                    <button type="submit" class="btn btn-success">Record Payment</button>
+                </form>
+            {% endif %}
+        {% endfor %}
+    </div>
+    <h3 class="section-gap">Correction History</h3>
+    <div class="card">
+        <table class="data-table">
+            <tr>
+                <th>Date</th>
+                <th>Amount</th>
+                <th>Reason</th>
+            </tr>
+            {% for a in adjustments %}
+                <tr>
+                    <td>{{ a.created_at[:10] }}</td>
+                    <td>{{ "%.2f"|format(a.amount) }}</td>
+                    <td>{{ a.reason or "" }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+        <form method="post"
+              action="/accounts/{{ account_number }}/adjustment"
+              style="margin-top:12px">
+            <label>Add a correction (positive adds to balance, negative reduces it)</label>
+            <input type="number" step="0.01" name="amount" required>
+            <label>Reason (optional)</label>
+            <input type="text" name="reason">
+            <button type="submit" class="btn btn-primary">Add Correction</button>
+        </form>
+    </div>
+{% endblock %}

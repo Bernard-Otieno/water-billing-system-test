@@ -1,0 +1,328 @@
+{% extends "base.html" %}
+{% block title %}Stats{% endblock %}
+{% block content %}
+    <style>
+        /* Donut chart positioning: canvas draws the ring, this div sits centered on top of it */
+        .donut-wrap {
+            position: relative;
+            width: 140px;
+            height: 140px;
+            margin: 4px auto 0;
+        }
+        .donut-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            text-align: center;
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1.15;
+            color: var(--color-text);
+        }
+    </style>
+    <div class="topbar">
+        <h2>Stats — {{ current_month_name }} {{ current_year }}</h2>
+        <a href="/dashboard" class="btn btn-secondary btn-small">Back to Dashboard</a>
+    </div>
+
+    <div class="ai-card" id="ai_insights_card">
+        <div class="ai-card-inner">
+            <div class="ai-heading">
+                <svg width="16" height="16" viewBox="0 0 24 24"><defs><linearGradient id="gAsk" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#4C8DF6"/><stop offset="50%" stop-color="#9168C0"/><stop offset="100%" stop-color="#D96570"/></linearGradient></defs><path fill="url(#gAsk)" d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z"/></svg>
+                <span class="ai-title">Ask about your data</span>
+            </div>
+            <div class="ai-row">
+                <input type="text" id="ai_question" placeholder="e.g. Is anything concerning about this month's numbers?"
+                    autocomplete="off" onkeydown="if(event.key==='Enter') askInsight();">
+                <button type="button" class="btn btn-gem-fill" onclick="askInsight()">Ask</button>
+            </div>
+            <button type="button" class="btn btn-gem-outline" onclick="runFullAnalysis()">🔍 Run Full Analysis</button>
+            <div id="ai_loading" class="ai-thinking" style="display:none;">✦ Thinking…</div>
+            <div id="ai_error" class="alert alert-danger" style="display:none; margin-top:8px;"></div>
+            <div id="ai_answer" class="ai-answer" style="display:none;"></div>
+            <div class="powered-by-gemini">
+                <svg width="11" height="11" viewBox="0 0 24 24"><defs><linearGradient id="gPB" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#4C8DF6"/><stop offset="50%" stop-color="#9168C0"/><stop offset="100%" stop-color="#D96570"/></linearGradient></defs><path fill="url(#gPB)" d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z"/></svg>
+                Powered by <span class="grad-text">Gemini</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="card stat-card">
+            <div class="stat-label">Billed This Month</div>
+            <div class="donut-wrap">
+                <canvas id="billedMonthDonut" width="140" height="140"></canvas>
+                <div class="donut-center" id="billedMonthLabel">KES 0</div>
+            </div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-label">Billed This Year</div>
+            <div class="donut-wrap">
+                <canvas id="billedYearDonut" width="140" height="140"></canvas>
+                <div class="donut-center" id="billedYearLabel">KES 0</div>
+            </div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-label">Collected This Month</div>
+            <div class="donut-wrap">
+                <canvas id="collectedMonthDonut" width="140" height="140"></canvas>
+                <div class="donut-center" id="collectedMonthLabel">KES 0</div>
+            </div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-label">Collected This Year</div>
+            <div class="donut-wrap">
+                <canvas id="collectedYearDonut" width="140" height="140"></canvas>
+                <div class="donut-center" id="collectedYearLabel">KES 0</div>
+            </div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-label">Collection Rate (Month)</div>
+            <div class="donut-wrap">
+                <canvas id="collectionMonthDonut" width="140" height="140"></canvas>
+                <div class="donut-center" id="collectionMonthLabel">0%</div>
+            </div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-label">Collection Rate (Year)</div>
+            <div class="donut-wrap">
+                <canvas id="collectionYearDonut" width="140" height="140"></canvas>
+                <div class="donut-center" id="collectionYearLabel">0%</div>
+            </div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-label">Total Outstanding</div>
+            <div class="donut-wrap">
+                <canvas id="outstandingDonut" width="140" height="140"></canvas>
+                <div class="donut-center" id="outstandingLabel">KES 0</div>
+            </div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-label">Bills Not Yet Sent</div>
+            <div class="donut-wrap">
+                <canvas id="unsentDonut" width="140" height="140"></canvas>
+                <div class="donut-center" id="unsentLabel">0</div>
+            </div>
+            {% if unsent_count > 0 %}<a href="/billing/send" class="muted">Send them &rarr;</a>{% endif %}
+        </div>
+        <div class="card stat-card">
+            <div class="stat-label">Units Consumed (Month)</div>
+            <div class="donut-wrap">
+                <canvas id="unitsMonthDonut" width="140" height="140"></canvas>
+                <div class="donut-center" id="unitsMonthLabel">0</div>
+            </div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-label">Units Consumed (Year)</div>
+            <div class="donut-wrap">
+                <canvas id="unitsYearDonut" width="140" height="140"></canvas>
+                <div class="donut-center" id="unitsYearLabel">0</div>
+            </div>
+        </div>
+    </div>
+    <h3 class="section-gap">This Month's Bills</h3>
+    <div class="card">
+        <span class="badge badge-paid">Paid: {{ status_counts.paid }}</span>
+        &nbsp;
+        <span class="badge badge-partial">Partial: {{ status_counts.partial }}</span>
+        &nbsp;
+        <span class="badge badge-unpaid">Unpaid: {{ status_counts.unpaid }}</span>
+    </div>
+    <h3 class="section-gap">Billed vs Collected — Last 6 Months</h3>
+    <div class="card">
+        <canvas id="trendChart" height="260"></canvas>
+    </div>
+    <h3 class="section-gap">{{ current_year }} vs {{ current_year - 1 }}</h3>
+    <div class="card">
+        <canvas id="yoyChart" height="260"></canvas>
+    </div>
+    <h3 class="section-gap">Top 5 Outstanding Accounts</h3>
+    <div class="card" style="overflow-x:auto;">
+        <table class="data-table">
+            <tr>
+                <th>Account</th>
+                <th>Name(s)</th>
+                <th>Balance Owed</th>
+            </tr>
+            {% for row in top_outstanding %}
+                <tr>
+                    <td><a href="/accounts/{{ row.account_number }}/detail" class="link-strong">{{ row.account_number }}</a></td>
+                    <td>{{ row.names }}</td>
+                    <td class="text-danger">{{ "%.2f"|format(row.balance) }}</td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="3" class="muted">No outstanding balances 🎉</td>
+                </tr>
+            {% endfor %}
+        </table>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+    <script id="chart-data" type="application/json">{{ chart_data | tojson }}</script>
+    <script>
+    const chartData = JSON.parse(document.getElementById('chart-data').textContent);
+
+    new Chart(document.getElementById('trendChart'), {
+        type: 'bar',
+        data: {
+            labels: chartData.trend_labels,
+            datasets: [
+                { label: 'Billed', data: chartData.trend_billed, backgroundColor: '#0d6e9c' },
+                { label: 'Collected', data: chartData.trend_collected, backgroundColor: '#1e8e5a' }
+            ]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+    });
+
+    function createStatDonut(canvasId, labelId, fillPercent, color, target, opts) {
+        opts = opts || {};
+        new Chart(document.getElementById(canvasId), {
+            type: 'doughnut',
+            data: {
+                datasets: [{
+                    data: [fillPercent, Math.max(0, 100 - fillPercent)],
+                    backgroundColor: [color, '#e5edf2'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                cutout: '75%',
+                responsive: false,
+                animation: { animateRotate: true, duration: 900, easing: 'easeOutQuart' },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        enabled: true,
+                        filter: (item) => item.dataIndex === 0,
+                        callbacks: {
+                            label: () => (opts.prefix || '') + target.toLocaleString(undefined,
+                                { minimumFractionDigits: opts.decimals || 0, maximumFractionDigits: opts.decimals || 0 }
+                            ) + (opts.suffix || '')
+                        }
+                    }
+                }
+            }
+        });
+        animateCountUp(labelId, target, opts);
+    }
+
+    function animateCountUp(labelId, target, opts) {
+        opts = opts || {};
+        const el = document.getElementById(labelId);
+        const duration = opts.duration || 900;
+        const decimals = opts.decimals !== undefined ? opts.decimals : 0;
+        const start = performance.now();
+        function step(now) {
+            const progress = Math.min((now - start) / duration, 1);
+            const current = progress * target;
+            el.textContent = (opts.prefix || '') +
+                current.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) +
+                (opts.suffix || '');
+            if (progress < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
+    // Updated stats.html using your CSS variable theme:
+    const colors = {
+        primary: '#3A36E0', // var(--color-primary)
+        success: '#12B76A', // var(--color-success)
+        danger: '#E23744',  // var(--color-danger)
+        warning: '#F79009', // var(--color-warning)
+        muted: '#64748B'    // var(--color-muted)
+    };
+
+    createStatDonut('billedMonthDonut', 'billedMonthLabel', 100, colors.primary, parseFloat('{{ total_billed_month }}'), { prefix: 'KES ' });
+    createStatDonut('billedYearDonut', 'billedYearLabel', 100, colors.primary, parseFloat('{{ total_billed_year }}'), { prefix: 'KES ' });
+    createStatDonut('collectedMonthDonut', 'collectedMonthLabel', 100, colors.success, parseFloat('{{ total_collected_month }}'), { prefix: 'KES ' });
+    createStatDonut('collectedYearDonut', 'collectedYearLabel', 100, colors.success, parseFloat('{{ total_collected_year }}'), { prefix: 'KES ' });
+    createStatDonut('collectionMonthDonut', 'collectionMonthLabel', parseFloat('{{ collection_rate_month }}'), colors.primary, parseFloat('{{ collection_rate_month }}'), { suffix: '%', decimals: 1 });
+    createStatDonut('collectionYearDonut', 'collectionYearLabel', parseFloat('{{ collection_rate_year }}'), colors.success, parseFloat('{{ collection_rate_year }}'), { suffix: '%', decimals: 1 });
+    createStatDonut('outstandingDonut', 'outstandingLabel', 100, colors.danger, parseFloat('{{ total_outstanding }}'), { prefix: 'KES ' });
+    createStatDonut('unsentDonut', 'unsentLabel', 100, colors.warning, parseFloat('{{ unsent_count }}'), {});
+    createStatDonut('unitsMonthDonut', 'unitsMonthLabel', 100, colors.muted, parseFloat('{{ total_units_month }}'), { decimals: 1 });
+    createStatDonut('unitsYearDonut', 'unitsYearLabel', 100, colors.muted, parseFloat('{{ total_units_year }}'), { decimals: 1 });
+
+    new Chart(document.getElementById('yoyChart'), {
+        type: 'line',
+        data: {
+            labels: chartData.yoy_labels,
+            datasets: [
+                { label: '{{ current_year }}', data: chartData.yoy_current, borderColor: '#0d6e9c', backgroundColor: '#0d6e9c', tension: 0.2 },
+                { label: '{{ current_year - 1 }}', data: chartData.yoy_previous, borderColor: '#b8791f', backgroundColor: '#b8791f', tension: 0.2 }
+            ]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+    });
+
+        async function askInsight() {
+            const question = document.getElementById('ai_question').value.trim();
+            if (!question) return;
+
+            const loading = document.getElementById('ai_loading');
+            const errorBox = document.getElementById('ai_error');
+            const answerBox = document.getElementById('ai_answer');
+
+            errorBox.style.display = 'none';
+            answerBox.style.display = 'none';
+            loading.style.display = 'block';
+
+            try {
+                const formData = new FormData();
+                formData.append('question', question);
+                const res = await fetch('/insights/query', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                loading.style.display = 'none';
+
+                if (!res.ok) {
+                    errorBox.innerText = data.detail || 'Something went wrong.';
+                    errorBox.style.display = 'block';
+                    return;
+                }
+
+                
+                answerBox.innerHTML = DOMPurify.sanitize(marked.parse(data.answer));
+                answerBox.style.display = 'block';
+            } catch (err) {
+                loading.style.display = 'none';
+                errorBox.innerText = 'Could not reach the server. Try again.';
+                errorBox.style.display = 'block';
+            }
+        }
+
+        async function runFullAnalysis() {
+        const loading = document.getElementById('ai_loading');
+        const errorBox = document.getElementById('ai_error');
+        const answerBox = document.getElementById('ai_answer');
+
+        errorBox.style.display = 'none';
+        answerBox.style.display = 'none';
+        loading.innerText = 'Analyzing your business data...';
+        loading.style.display = 'block';
+
+        try {
+            const res = await fetch('/insights/full-analysis');
+            const data = await res.json();
+            loading.style.display = 'none';
+
+            if (!res.ok) {
+                errorBox.innerText = data.detail || 'Something went wrong.';
+                errorBox.style.display = 'block';
+                return;
+            }
+
+            answerBox.innerHTML = DOMPurify.sanitize(marked.parse(data.analysis));
+            answerBox.style.display = 'block';
+        } catch (err) {
+            loading.style.display = 'none';
+            errorBox.innerText = 'Could not reach the server. Try again.';
+            errorBox.style.display = 'block';
+        }
+    }
+    </script>
+{% endblock %}

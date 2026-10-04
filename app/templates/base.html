@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{% block title %}Water Billing System{% endblock %}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    </head>
+    <body>
+        <div class="page {% if wide %}page-wide{% endif %}">
+            {% block content %}{% endblock %}
+        </div>
+    </body>
+</html>

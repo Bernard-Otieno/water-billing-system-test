@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+    <div class="topbar">
+        <h2 style="margin:0;">All Accounts</h2>
+        <a href="/logout" class="btn btn-secondary btn-small">Log out</a>
+    </div>
+    <div class="topbar" style="gap:10px; align-items:stretch;">
+        <input type="text"
+               id="filter_box"
+               placeholder="Search by name or account number..."
+               oninput="filterTable()"
+               autocomplete="off"
+               style="margin-bottom:0;
+                      flex:1">
+        <a href="/accounts/add"
+           class="btn btn-primary btn-small"
+           style="white-space:nowrap">+ Add Customer</a>
+    </div>
+
+    <div class="ai-card" id="daily_insight_card" style="display:none;">
+        <div class="ai-card-inner">
+            <div class="ai-heading">
+                <svg width="16" height="16" viewBox="0 0 24 24"><defs><linearGradient id="gDaily" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#4C8DF6"/><stop offset="50%" stop-color="#9168C0"/><stop offset="100%" stop-color="#D96570"/></linearGradient></defs><path fill="url(#gDaily)" d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z"/></svg>
+                <span class="ai-title">Today's Insight</span>
+            </div>
+            <div id="daily_insight_text" class="ai-answer" style="margin-top:0; padding-top:0; border-top:none;"></div>
+            <div class="powered-by-gemini">
+                <svg width="11" height="11" viewBox="0 0 24 24"><defs><linearGradient id="gPB2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#4C8DF6"/><stop offset="50%" stop-color="#9168C0"/><stop offset="100%" stop-color="#D96570"/></linearGradient></defs><path fill="url(#gPB2)" d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z"/></svg>
+                Powered by <span class="grad-text">Gemini</span>
+            </div>
+        </div>
+    </div>
+
+    <div style="display:flex; gap:8px; margin-bottom:16px;">
+        <button type="button" class="btn btn-secondary btn-small" onclick="sortRows('balance')">Sort: Balance</button>
+        <button type="button" class="btn btn-secondary btn-small" onclick="sortRows('unbilled')">Sort: Unbilled First</button>
+    </div>
+
+    <div class="card"
+         style="max-height:55vh;
+                overflow-y:auto;
+                overflow-x:auto;
+                padding:0">
+
+
+
+        <table class="data-table" id="accounts_table" style="margin:0;">
+            <tr style="position:sticky;
+                       top:0;
+                       background:var(--color-card);
+                       z-index:1">
+                <th>Account</th>
+                <th>Name(s)</th>
+                <th>Balance Owed</th>
+            </tr>
+
+
+
+            {% for row in rows %}
+                <tr data-search="{{ row.names|lower }} {{ row.account_number|lower }}"
+                    data-balance="{{ row.balance }}"
+                    data-unbilled="{{ '1' if row.unbilled else '0' }}">   
+                    <td><a href="/accounts/{{ row.account_number }}/detail" class="link-strong">{{ row.account_number }}</a></td>
+                    <td>{{ row.names }}</td>
+                    <td>
+                        <span class="badge {% if row.balance > 0 %}badge-unpaid{% elif row.balance < 0 %}badge-paid{% else %}badge-partial{% endif %}"
+                              style="font-size:13px;
+                                     padding:6px 14px">KES {{ "%.2f"|format(row.balance) }}</span>
+                    </td>
+                </tr>
+            {% endfor %}
+        </table>
+    </div>
+    <div class="card" style="text-align:center;">
+        <a href="/stats"
+           class="btn btn-primary"
+           style="max-width:320px;
+                  margin:0 auto;
+                  display:block">📊 View Monthly &amp; Yearly Stats</a>
+        <a href="/reports/billing-export"
+           class="btn btn-primary btn-small"
+           style="max-width:320px;
+                  margin:10px auto 0;
+                  display:block">📊 Download Billing Report</a>
+        <a href="/accounts/close-list"
+           class="btn btn-primary btn-small"
+           style="max-width:320px;
+                  margin:10px auto 0;
+                  display:block">Closure List</a>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+    <script>
+    function filterTable() {
+        const query = document.getElementById('filter_box').value.trim().toLowerCase();
+        const rows = document.querySelectorAll('#accounts_table tr[data-search]');
+        rows.forEach(row => {
+            const matches = row.getAttribute('data-search').includes(query);
+            row.style.display = matches ? '' : 'none';
+        });
+    }
+    async function loadDailyInsight() {
+        const card = document.getElementById('daily_insight_card');
+        const text = document.getElementById('daily_insight_text');
+        try {
+            const res = await fetch('/insights/daily');
+            if (!res.ok) return;
+            const data = await res.json();
+            text.innerHTML = DOMPurify.sanitize(marked.parse(data.insight));
+            card.style.display = 'block';
+        } catch (err) {
+            // fail silently — dashboard must never look broken over this
+        }
+    }
+    function sortRows(mode) {
+    const table = document.getElementById('accounts_table');
+    const rows = Array.from(table.querySelectorAll('tr[data-search]'));
+
+    rows.sort((a, b) => {
+        if (mode === 'unbilled') {
+            return b.dataset.unbilled - a.dataset.unbilled; // "1" rows float to top
+        }
+        return b.dataset.balance - a.dataset.balance; // highest balance first
+    });
+
+    rows.forEach(row => table.appendChild(row)); // re-appending in new order moves them, doesn't duplicate
+    }
+    loadDailyInsight();
+    </script>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Page Not Found{% endblock %}
+{% block content %}
+    <div class="card"
+         style="max-width:360px;
+                margin:60px auto 0;
+                text-align:center">
+        <p style="font-size:48px; margin-bottom:8px;">💧</p>
+        <h2>We couldn't find that</h2>
+        <p class="muted" style="margin-bottom:20px;">{{ message }}</p>
+        <a href="{{ home_url }}"
+           class="btn btn-primary"
+           style="max-width:260px;
+                  margin:0 auto">{{ home_label }}</a>
+    </div>
+{% endblock %}
