@@ -110,3 +110,12 @@ CREATE TABLE public.mpesa_transactions (
   CONSTRAINT mpesa_transactions_pkey PRIMARY KEY (id),
   CONSTRAINT mpesa_transactions_bill_id_fkey FOREIGN KEY (bill_id) REFERENCES public.bills(id)
 );
+
+CREATE VIEW public.latest_bills AS
+SELECT DISTINCT ON (account_id) account_id,
+    closing_balance,
+    billing_year,
+    billing_month,
+    notified_at
+FROM bills
+ORDER BY account_id, billing_year DESC, billing_month DESC;
