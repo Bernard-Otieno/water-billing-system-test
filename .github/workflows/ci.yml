@@ -15,7 +15,7 @@ jobs:
     name: Code Quality (Ruff + Black)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -37,7 +37,7 @@ jobs:
     name: Security Scans
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # gitleaks needs full history, not just the latest commit
 
@@ -72,7 +72,7 @@ jobs:
       SUPABASE_KEY: "ci-placeholder-key"
       SESSION_SECRET_KEY: "ci-placeholder-secret"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -103,7 +103,7 @@ jobs:
     name: Docker Build & Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Hadolint (Dockerfile lint)
         uses: hadolint/hadolint-action@v3.1.0
