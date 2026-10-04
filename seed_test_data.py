@@ -1,6 +1,6 @@
 from datetime import date
-from app.database import supabase
 
+from app.database import supabase
 
 test_accounts = [
     {
@@ -8,7 +8,13 @@ test_accounts = [
         "address": "1 Test Lane",
         "account_type": "Residential",
         "price_per_unit": 150,
-        "people": [{"name": "Alice Wanjiru", "phone_number": "254700000001", "contact_method": "sms"}],
+        "people": [
+            {
+                "name": "Alice Wanjiru",
+                "phone_number": "254700000001",
+                "contact_method": "sms",
+            }
+        ],
         "previous_reading": 100,
         "current_reading": 115,
         "opening_balance": 0,
@@ -20,7 +26,13 @@ test_accounts = [
         "address": "2 Test Lane",
         "account_type": "Residential",
         "price_per_unit": 150,
-        "people": [{"name": "Jake Wanjiru", "phone_number": "254700000002", "contact_method": "whatsapp"}],
+        "people": [
+            {
+                "name": "Jake Wanjiru",
+                "phone_number": "254700000002",
+                "contact_method": "whatsapp",
+            }
+        ],
         "previous_reading": 100,
         "current_reading": 300,
         "opening_balance": 50,
@@ -33,7 +45,13 @@ test_accounts = [
         "address": "3 Test Lane",
         "account_type": "Residential",
         "price_per_unit": 150,
-        "people": [{"name": "Grace Achieng", "phone_number": "254700000003", "contact_method": "sms"}],
+        "people": [
+            {
+                "name": "Grace Achieng",
+                "phone_number": "254700000003",
+                "contact_method": "sms",
+            }
+        ],
         "previous_reading": 50,
         "current_reading": 90,
         "opening_balance": 0,
@@ -46,7 +64,13 @@ test_accounts = [
         "address": "4 Test Lane",
         "account_type": "Residential",
         "price_per_unit": 150,
-        "people": [{"name": "Peter Mwangi", "phone_number": "254700000004", "contact_method": "whatsapp"}],
+        "people": [
+            {
+                "name": "Peter Mwangi",
+                "phone_number": "254700000004",
+                "contact_method": "whatsapp",
+            }
+        ],
         "previous_reading": 200,
         "current_reading": 210,
         "opening_balance": 0,
@@ -60,8 +84,16 @@ test_accounts = [
         "account_type": "Residential",
         "price_per_unit": 150,
         "people": [
-            {"name": "Samuel Otieno", "phone_number": "254700000005", "contact_method": "sms"},
-            {"name": "Mary Otieno", "phone_number": "254700000006", "contact_method": "whatsapp"},
+            {
+                "name": "Samuel Otieno",
+                "phone_number": "254700000005",
+                "contact_method": "sms",
+            },
+            {
+                "name": "Mary Otieno",
+                "phone_number": "254700000006",
+                "contact_method": "whatsapp",
+            },
         ],
         "previous_reading": 300,
         "current_reading": 340,
@@ -75,7 +107,13 @@ test_accounts = [
         "address": "6 Test Lane",
         "account_type": "Residential",
         "price_per_unit": 150,
-        "people": [{"name": "Dennis Kiprop", "phone_number": "254700000007", "contact_method": "sms"}],
+        "people": [
+            {
+                "name": "Dennis Kiprop",
+                "phone_number": "254700000007",
+                "contact_method": "sms",
+            }
+        ],
         "previous_reading": 80,
         "current_reading": 95,
         "opening_balance": 500,
@@ -89,8 +127,16 @@ test_accounts = [
         "account_type": "Residential",
         "price_per_unit": 150,
         "people": [
-            {"name": "Lucy Njeri", "phone_number": "254700000008", "contact_method": "whatsapp"},
-            {"name": "John Njeri", "phone_number": "254700000009", "contact_method": "sms"},
+            {
+                "name": "Lucy Njeri",
+                "phone_number": "254700000008",
+                "contact_method": "whatsapp",
+            },
+            {
+                "name": "John Njeri",
+                "phone_number": "254700000009",
+                "contact_method": "sms",
+            },
         ],
         "previous_reading": 150,
         "current_reading": 165,
@@ -104,7 +150,13 @@ test_accounts = [
         "address": "8 Test Lane",
         "account_type": "Residential",
         "price_per_unit": 150,
-        "people": [{"name": "Esther Wambui", "phone_number": "254700000010", "contact_method": "sms"}],
+        "people": [
+            {
+                "name": "Esther Wambui",
+                "phone_number": "254700000010",
+                "contact_method": "sms",
+            }
+        ],
         "previous_reading": 400,
         "current_reading": 400,
         "opening_balance": 900,
@@ -119,13 +171,20 @@ for spec in test_accounts:
         for p in spec["people"]
     ]
 
-    account_id = supabase.table("accounts").insert({
-        "account_number": spec["account_number"],
-        "address": spec["address"],
-        "account_type": spec["account_type"],
-        "price_per_unit": spec["price_per_unit"],
-    }).execute().data[0]["id"]
-    
+    account_id = (
+        supabase.table("accounts")
+        .insert(
+            {
+                "account_number": spec["account_number"],
+                "address": spec["address"],
+                "account_type": spec["account_type"],
+                "price_per_unit": spec["price_per_unit"],
+            }
+        )
+        .execute()
+        .data[0]["id"]
+    )
+
     for pid in person_ids:
         supabase.table("account_people").insert(
             {"account_id": account_id, "person_id": pid}
@@ -136,24 +195,38 @@ for spec in test_accounts:
     closing_balance = round(spec["opening_balance"] + amount_due, 2)
     today = date.today()
 
-    bill_id = supabase.table("bills").insert({
-        "account_id": account_id,
-        "billing_month": today.month, "billing_year": today.year,
-        "previous_reading": spec["previous_reading"],
-        "current_reading": spec["current_reading"],
-        "units_used": units_used,
-        "rate_applied": spec["price_per_unit"],
-        "amount_due": amount_due,
-        "opening_balance": spec["opening_balance"],
-        "closing_balance": closing_balance,
-        "status": "unpaid",
-        "notified_at": "2026-01-01T00:00:00" if spec["already_notified"] else None,
-    }).execute().data[0]["id"]
+    bill_id = (
+        supabase.table("bills")
+        .insert(
+            {
+                "account_id": account_id,
+                "billing_month": today.month,
+                "billing_year": today.year,
+                "previous_reading": spec["previous_reading"],
+                "current_reading": spec["current_reading"],
+                "units_used": units_used,
+                "rate_applied": spec["price_per_unit"],
+                "amount_due": amount_due,
+                "opening_balance": spec["opening_balance"],
+                "closing_balance": closing_balance,
+                "status": "unpaid",
+                "notified_at": (
+                    "2026-01-01T00:00:00" if spec["already_notified"] else None
+                ),
+            }
+        )
+        .execute()
+        .data[0]["id"]
+    )
 
     if spec["amount_paid"]:
-        supabase.table("payments").insert({
-            "bill_id": bill_id, "amount": spec["amount_paid"], "payment_date": today.isoformat()
-        }).execute()
+        supabase.table("payments").insert(
+            {
+                "bill_id": bill_id,
+                "amount": spec["amount_paid"],
+                "payment_date": today.isoformat(),
+            }
+        ).execute()
         new_status = "paid" if spec["amount_paid"] >= amount_due else "partial"
         new_closing = round(closing_balance - spec["amount_paid"], 2)
         supabase.table("bills").update(
