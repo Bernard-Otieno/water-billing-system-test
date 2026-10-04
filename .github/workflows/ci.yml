@@ -115,7 +115,7 @@ jobs:
         run: docker build -t water-billing-system:ci .
 
       - name: Trivy (container vulnerability scan)
-        uses: aquasecurity/trivy-action@v0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: 'water-billing-system:ci'
           format: 'table'
